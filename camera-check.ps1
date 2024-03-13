@@ -1,90 +1,43 @@
 #Requires -RunAsAdministrator
-<#
-    Tested on Windows 11
-    This works for the following programs so far:
-    - Teams
-    - Zoom
-    - obs64
 
-    What doesn't seem to work, unless you run this script as admin:
-    - Slack preview window (svchost)
-    - Teams from webapp in Edge (svchost)
-    - Camera app (svchost)
-    - Camtasia Capture (svchost)
-#>
-
+# Utils provides Write-Host to prepends the log message with a date
 Write-Host "Current PSScriptRoot [$PSScriptRoot]"
 . $PSScriptRoot/utils.ps1
 $location = Get-Location
+
+# Provide handle yourself, by downloading it from: https://learn.microsoft.com/en-us/sysinternals/downloads/handle
 $handleExe = "$location\Handle\handle64.exe"
 
-function Init-Script {
-    Write-Message "Using [$handleExe] to search for the handles"
-
-    if (!(Test-Path (Split-Path -Path $handleExe))) {
-        # make directory if it doesn't exist
-        New-Item -ItemType Directory -Path $location\Handle
-    }
-
-    # check if the file exists
-    if (!(Test-Path $handleExe))
-    {
-        Write-Message "[$handleExe] does not exists so downloading it first"
-        $zipFile = "$location\Handle\handle.zip"
-        if (!(Test-Path $zipFile)) {
-            $downloadUri = "https://download.sysinternals.com/files/Handle.zip"
-            Write-Message "Downloading handle from [$downloadUri]"
-            Invoke-RestMethod -Uri $downloadUri -outFile $zipFile
-        }
-
-        $ExtractPath = "$location\Handle\"
-        $ExtractShell = New-Object -ComObject Shell.Application
-        $ExtractFiles = $ExtractShell.Namespace($zipFile).Items()
-        $ExtractShell.NameSpace($ExtractPath).CopyHere($ExtractFiles)
-        Start-Process $ExtractPath
-
-        # unzip the file
-        Write-Message "Unzipping [$zipFile] to [$location\Handle]"
-        $unzip = New-Object -ComObject Shell.Application
-
-        if (!(Test-Path $handleExe)) {
-            Write-Message "handle64.exe not found in [$(Get-Location)], cannot continue"
-            return
-        }
-    }
-}
-# always init the script and download the handle64.exe if not available
-Init-Script
-
+# Function to check whether a specified camera device is in use
 function Check-Device {
     param(
-        [object] $device,
-        [int] $deviceCount
+        [object] $device
     )
 
     # load Physical Device Object Name
     $property = Get-PnpDeviceProperty -InstanceId $device.InstanceId -KeyName "DEVPKEY_Device_PDOName"
 
     if ($property.Data.Length -eq 0) {
-        Write-Message "$deviceCount.  No PDON found for [$($device.FriendlyName)] so skipping it"
+        Write-Message "No PDON found for [$($device.FriendlyName)] so skipping it"
         return
     }
 
-    Write-Message "$deviceCount.  Checking handles in use for [$($device.FriendlyName)] and PDON [$($property.Data)]"
+    Write-Message "Checking handles in use for [$($device.FriendlyName)] and PDON [$($property.Data)]"
     $handles = $(& $handleExe -NoBanner -a "$($property.Data)")
+
     if ($handles -gt 0) {
-        if ($handles[0].ToLower().StartsWith("no matching handles found")){
+        # Check if any handles for this device are found
+        if ($handles -is [string] -and $handles.ToLower().StartsWith("no matching handles found")){
             Write-Message "  - No handles found for [$($device.FriendlyName)]"
         }
         else {
-
+            # Print all processes using the camera to the standard out
             Write-Message "  - Found [$($handles.Length)] handles on $($device.FriendlyName)"
             $processes = @()
             foreach ($handle in $handles) {
                 # remove all spaces
                 $nospaceshandle = $handle.Replace(" ", "")
                 if ($nospaceshandle.Length -gt 0) {
-                    # Write-Host $handle
                     $splitted = $handle.Split(" ")
                     $process = $splitted[0]
                         if (!($processes.Contains($process))) {
@@ -92,6 +45,8 @@ function Check-Device {
                         }
                     }
             }
+
+            # Print the result of the handle check and return true if handles were found
             if ($processes.Length -eq 0) {
                 Write-Message " -  No handles found for [$($device.FriendlyName)]"
             }
@@ -108,47 +63,20 @@ function Check-Device {
     return $false
 }
 
-function Test-Loop {
-    while ($true) {
-        Write-Message "Searching for camera devices..."
-        $devices = Get-PnpDevice -Class Camera
-        Write-Message "Found [$($devices.Count)] camera devices"
-        $deviceCount = 0
-        foreach ($device in $devices) {
-            $deviceCount++
-            $result = Check-Device $device $deviceCount
-        }
-        Write-Message ""
-    }
-    Write-Message "Done"
-}
-
+# Find every camera device on the system and check whether it is in use
 function Get-CameraActive {
     
     Write-Message "Searching for camera devices..."
-    $devices = Get-PnpDevice -Class Camera,Image
+    $devices = Get-PnpDevice -Class Camera
     Write-Message "Found [$($devices.Count)] camera devices"
-    $deviceCount = 0
     foreach ($device in $devices) {
-        $deviceCount++        
-        if ($device.FriendlyName.StartsWith("HP60843E.localdomain")) {
-            # skip this device
-            Write-Message "    Skipping [$($device.FriendlyName)]"
-            continue
-        }
-        $result = Check-Device $device $deviceCount
+        $result = Check-Device $device
         if ($result) {
             Write-Message "Found active camera device"
             return $true
         }
     }
     return $false
-}
-
-function CheckCameraOnceWithAction {
-    Write-Messge "Checking for camera devices from CheckCameraOnceWithAction"
-    $active = Get-CameraActive
-    Run-Action $active    
 }
 
 function LoopWithAction {
@@ -165,36 +93,20 @@ function LoopWithAction {
                 Write-Message "The lights are off already and the user is not authenticated, skipping all checks"                
             }
         }
-        else {
-            # check if there are more then 1 monitor available (the laptop itself already is the first one :-) )
-            $displays = Get-CimInstance -Namespace root\wmi -ClassName WmiMonitorBasicDisplayParams
-            if ($displays.Count -gt 1) {
-                Write-Message "Found [$($displays.Count)] monitors"
-                # check normally
-                $active = Get-CameraActive
-                Run-Action $active
-            }
-            else {
-                Write-Message "Found [$($displays.Count)] monitors, skipping camera check"
-            }
-        }
 
-        # don't run again unless a minute has passed
+        $active = Get-CameraActive
+        Run-Action $active
+
+        # don't run again unless 30 seconds have passed
         $end = Get-Date
         $duration = $end - $start
-        if ($duration.TotalSeconds -lt 60) {
-            Write-Message "Sleeping for $((60-$duration.TotalSeconds).ToString('#')) seconds"
-            Start-Sleep (60-($duration.TotalSeconds))
+        if ($duration.TotalSeconds -lt 30) {
+            Write-Message "Sleeping for $((30-$duration.TotalSeconds).ToString('#')) seconds"
+            Start-Sleep (30-($duration.TotalSeconds))
         }
     }
 }
 
-# lamp living room to test:
-# $entityId = "switch.shelly_plug_s_9a57b1_relay_0"
-
-# actual office camera lights:
-$entityId = "script.camera_lights"
-$checkEntityIdState = "light.key_light_left"
 function Run-Action {
     param(
         [bool] $active = $false
@@ -226,8 +138,4 @@ function Run-Action {
     }
 }
 
-$logFileName="CameraCheck.log"
-
-#Test-Loop
 LoopWithAction
-#CheckCameraOnceWithAction

@@ -1,4 +1,4 @@
-This repo contains a collection of scripts I use for home automation stuff
+This repo is a fork of rajbos' home-automation repo and contains a simplified version of the camera status synchronization script to homeassistant.
 
 
 # Trigger a home assistant scene on unlock (Windows)
