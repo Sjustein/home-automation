@@ -72,7 +72,7 @@ function Get-CameraActive {
 
     Write-Message "Searching for camera devices..."
     $devices = Get-PnpDevice -Class Camera
-    Write-Message "Found [$($devices.Count)] camera devices"
+    Write-Message "Found [$($devices.Count)] potential camera devices before wildcard filter"
     foreach ($device in $devices) {
         # If a filter for the name is specified, filter on it
         if ($device.FriendlyName -notlike "*$deviceFilter*") {
@@ -109,9 +109,12 @@ function LoopWithAction {
         # don't run again unless 30 seconds have passed
         $end = Get-Date
         $duration = $end - $start
-        if ($duration.TotalSeconds -lt 30) {
-            Write-Message "Sleeping for $((30-$duration.TotalSeconds).ToString('#')) seconds"
-            Start-Sleep (30-($duration.TotalSeconds))
+        $sleep = $env:sleep
+        $sleepTime = $sleep-$duration.TotalSeconds
+
+        if ($duration.TotalSeconds -lt $sleep) {
+            Write-Message "Sleeping for $(($sleepTime).ToString('#')) seconds"
+            Start-Sleep ($sleepTime)
         }
     }
 }
