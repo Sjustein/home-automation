@@ -1,5 +1,7 @@
 #Requires -RunAsAdministrator
 
+. $PSScriptRoot/import-env.ps1
+
 # Utils provides Write-Host to prepends the log message with a date
 Write-Host "Current PSScriptRoot [$PSScriptRoot]"
 . $PSScriptRoot/utils.ps1
@@ -87,7 +89,7 @@ function LoopWithAction {
         if ($null -ne $logonui) {
             # if logonui is running, the user is not logged in at all, so if the lights are already off, we can stop the execution
             Write-Message "Found logonui process"
-            $state = getEntityState -entityId $checkEntityIdState
+            $state = getEntityState -entityId $entityId
             Write-Message "Current entity state is [$($state.state)]"
             if ($state.state -ne "on") {
                 Write-Message "The lights are off already and the user is not authenticated, skipping all checks"                
@@ -115,7 +117,7 @@ function Run-Action {
 
     . $PSScriptRoot/trigger-homeassistant.ps1
     
-    $state = getEntityState -entityId $checkEntityIdState    
+    $state = getEntityState    
     Write-Message "Current entity state is [$($state.state)]"
 
     if ($active) {
@@ -124,7 +126,7 @@ function Run-Action {
         } 
         else {            
             Write-Message "Turning on"
-            runScript -entityId $entityId
+            setState -state $True
         }
     }
     else {
@@ -133,7 +135,7 @@ function Run-Action {
         } 
         else {            
             Write-Message "Turning off"
-            runScript -entityId $entityId 
+            setState -state $False
         }
     }
 }
