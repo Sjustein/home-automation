@@ -68,10 +68,17 @@ function Check-Device {
 # Find every camera device on the system and check whether it is in use
 function Get-CameraActive {
     
+    $deviceFilter = $env:webcam_filter
+
     Write-Message "Searching for camera devices..."
     $devices = Get-PnpDevice -Class Camera
     Write-Message "Found [$($devices.Count)] camera devices"
     foreach ($device in $devices) {
+        # If a filter for the name is specified, filter on it
+        if ($device.FriendlyName -notlike "*$deviceFilter*") {
+            continue
+        }
+
         $result = Check-Device $device
         if ($result) {
             Write-Message "Found active camera device"
