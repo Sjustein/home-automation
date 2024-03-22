@@ -10,6 +10,21 @@ $location = Get-Location
 # Provide handle yourself, by downloading it from: https://learn.microsoft.com/en-us/sysinternals/downloads/handle
 $handleExe = "$location\Handle\handle64.exe"
 
+# Verify that the device is connected to the pre-defined wifi network
+function CheckNetworkName {
+    $connectedNetwork = (Get-NetConnectionProfile).Name
+    $predefinedNetworkName = $env:network_name
+
+    return ($connectedNetwork -like "*$predefinedNetworkName*")
+}
+
+# Main script
+if (-Not (CheckNetworkName)) {
+    Write-Message "Device is connected not to the predefined network."
+    exit
+}
+
+
 # Function to check whether a specified camera device is in use
 function Check-Device {
     param(

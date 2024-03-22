@@ -106,7 +106,7 @@ function setState {
         "Authorization" = "Bearer $token"
     }
     Write-Message "Calling the url"
-    $stateString = (&{ If ($state) {"On"} Else {"Off"} })
+    $stateString = (&{ If ($state) {"on"} Else {"off"} })
     Invoke-RestMethod -Uri $url -Body "{""state"": ""$stateString""}" -Headers $headers -Method POST
     Write-Message "Call made successfully"
 }
